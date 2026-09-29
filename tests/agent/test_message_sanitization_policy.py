@@ -457,6 +457,16 @@ class TestOutboundToolCallIdCap:
         assert assistant["tool_calls"][0]["id"] == short
         assert tool_msg["tool_call_id"] == short
 
+    def test_colon_in_tool_call_id_sanitized_to_underscore(self):
+        colon_id = "web_search:51"
+        api_kwargs = self._pair(colon_id)
+        sanitize_outbound_kwargs(SimpleNamespace(_force_ascii_payload=False), api_kwargs)
+
+        assistant, tool_msg = api_kwargs["messages"]
+        assert assistant["tool_calls"][0]["id"] == "web_search_51"
+        assert tool_msg["tool_call_id"] == "web_search_51"
+        assert assistant["tool_calls"][0]["call_id"] == "web_search_51"
+
     def test_composite_id_keeps_fc_tail_when_it_fits(self):
         # Oversized call half + a response-item half that still fits after clamping.
         oversized = "call_" + "B" * 70 + "|fc_0abc123"

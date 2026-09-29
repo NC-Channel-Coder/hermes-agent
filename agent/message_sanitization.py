@@ -594,7 +594,8 @@ MAX_TOOL_CALL_ID_LENGTH = 64
 
 
 def clamp_tool_call_id(call_id: Any) -> Any:
-    """Cap a tool-call id at ``MAX_TOOL_CALL_ID_LENGTH`` chars via deterministic hash surrogates.
+    """Cap a tool-call id at ``MAX_TOOL_CALL_ID_LENGTH`` chars via deterministic hash surrogates,
+    and sanitize non-alphanumeric characters (like colons in synthetic IDs) to underscores.
 
     Composite Responses ids (``call_x|fc_y``) keep their response-item half when the WHOLE id still
     fits after the call half is clamped; a pathological tail is itself hashed to fit, so every
@@ -603,6 +604,10 @@ def clamp_tool_call_id(call_id: Any) -> Any:
     """
     if not isinstance(call_id, str) or not call_id:
         return call_id
+    # Coerce any colon separators (common in synthetic tool IDs like 'terminal:58') to underscores,
+    # as Anthropic/strict wire formats reject colons with HTTP 400.
+    if ":" in call_id:
+        call_id = call_id.replace(":", "_")
     if len(call_id) <= MAX_TOOL_CALL_ID_LENGTH:
         return call_id
     head, sep, tail = call_id.partition("|")
