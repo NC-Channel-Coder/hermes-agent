@@ -512,3 +512,9 @@ class TestOutboundToolCallIdCap:
         tc = api_kwargs["messages"][0]["tool_calls"][0]
         assert len(tc["id"]) <= 64
         assert tc["id"] == api_kwargs["messages"][1]["tool_call_id"]
+
+    def test_codex_responses_mode_without_messages_key_remains_absent(self):
+        # codex_responses wire shape has input, instructions, model, store - no "messages"
+        api_kwargs = {"input": "hello", "instructions": "test", "model": "o3", "store": False}
+        sanitize_outbound_kwargs(SimpleNamespace(_force_ascii_payload=False), api_kwargs)
+        assert "messages" not in api_kwargs
