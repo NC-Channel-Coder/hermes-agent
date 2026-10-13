@@ -294,3 +294,49 @@ class TestMessagesEndpointContract:
             assert len(payload_compacted["messages"]) == 2
             assert any(m["content"] == "compacted history turn" for m in payload_compacted["messages"])
             assert any(m["content"] == "active turn" for m in payload_compacted["messages"])
+
+    @pytest.mark.asyncio
+    async def test_endpoint_honors_expanded_include_compacted_boolean_variants(self, adapter, session_db):
+        sid = session_db.create_session("compacted-bool-variants-test", "api_server")
+        def _insert(conn):
+            conn.execute(
+                "INSERT INTO messages (session_id, role, content, active, compacted, timestamp) VALUES (?, ?, ?, 0, 1, 1000.0)",
+                (sid, "user", "compacted turn"),
+            )
+            conn.execute(
+                "INSERT INTO messages (session_id, role, content, active, compacted, timestamp) VALUES (?, ?, ?, 1, 0, 1001.0)",
+                (sid, "user", "active turn"),
+            )
+        session_db._execute_write(_insert)
+
+        async with TestClient(TestServer(_messages_app(adapter))) as client:
+            for truthy in ("on", "1", "yes", "t", "y"):
+                resp = await client.get(f"/api/sessions/{sid}/messages?include_compacted={truthy}")
+                assert resp.status == 200
+                payload = await resp.json()
+                assert len(payload["messages"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_endpoint_include_compacted_with_order_latest_pagination(self, adapter, session_db):
+        sid = session_db.create_session("compacted-order-latest-test", "api_server")
+        def _insert(conn):
+            conn.execute(
+                "INSERT INTO messages (session_id, role, content, active, compacted, timestamp) VALUES (?, ?, ?, 0, 1, 1000.0)",
+                (sid, "user", "compacted turn 1"),
+            )
+            conn.execute(
+                "INSERT INTO messages (session_id, role, content, active, compacted, timestamp) VALUES (?, ?, ?, 0, 1, 1001.0)",
+                (sid, "user", "compacted turn 2"),
+            )
+            conn.execute(
+                "INSERT INTO messages (session_id, role, content, active, compacted, timestamp) VALUES (?, ?, ?, 1, 0, 1002.0)",
+                (sid, "user", "active turn 3"),
+            )
+        session_db._execute_write(_insert)
+
+        async with TestClient(TestServer(_messages_app(adapter))) as client:
+            resp = await client.get(f"/api/sessions/{sid}/messages?include_compacted=true&order=latest&limit=1&offset=0")
+            assert resp.status == 200
+            payload = await resp.json()
+            assert len(payload["messages"]) == 1
+            assert payload["messages"][0]["content"] == "active turn 3"

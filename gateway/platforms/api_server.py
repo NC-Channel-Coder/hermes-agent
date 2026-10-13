@@ -3299,10 +3299,30 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         limit = 500 if default_page else min(requested_limit, 500)
         # Compression lineage: return root→tip messages, matching the REST router (#51058).
         raw_include_compacted = request.query.get("include_compacted", "").strip().lower()
-        include_compacted = raw_include_compacted in {"true", "1", "yes"}
-        messages = await asyncio.to_thread(
-            db.get_messages, resolved_id, limit=limit, offset=offset, latest=latest_page,
-            include_ancestors=True, include_compacted=include_compacted)
+        include_compacted = raw_include_compacted in {"true", "1", "yes", "on", "t", "y"}
+
+        def _fetch_messages():
+            if db is None:
+                return []
+            db_path = getattr(db, "db_path", None)
+            if db_path and not getattr(db, "read_only", False):
+                try:
+                    from hermes_cli.web_server_sessions import _open_session_db_at_path
+                    read_db = _open_session_db_at_path(Path(db_path), read_only=True)
+                    try:
+                        resolved = read_db.resolve_resume_session_id(session_id)
+                        return read_db.get_messages(
+                            resolved, limit=limit, offset=offset, latest=latest_page,
+                            include_ancestors=True, include_compacted=include_compacted)
+                    finally:
+                        read_db.close()
+                except Exception:
+                    pass
+            return db.get_messages(
+                resolved_id, limit=limit, offset=offset, latest=latest_page,
+                include_ancestors=True, include_compacted=include_compacted)
+
+        messages = await asyncio.to_thread(_fetch_messages)
         serialized_messages = [self._message_response(m) for m in messages]
         return web.json_response({
             "object": "list", "session_id": resolved_id,
