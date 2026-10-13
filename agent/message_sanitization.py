@@ -157,6 +157,9 @@ def sanitize_outbound_kwargs(agent: Any, api_kwargs: dict) -> None:
             api_kwargs["tools"] = _clone_message_for_send(api_kwargs["tools"])
         _sanitize_structure_non_ascii(api_kwargs)
     api_kwargs["messages"] = clamp_outbound_tool_call_ids(api_kwargs.get("messages"))
+    # Guard: codex_responses mode has no "messages" key; do not inject one.
+    if api_kwargs.get("messages") is None:
+        api_kwargs.pop("messages", None)
 
 
 def _escape_invalid_chars_in_json_strings(raw: str) -> str:
